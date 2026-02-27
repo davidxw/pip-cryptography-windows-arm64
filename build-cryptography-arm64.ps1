@@ -7,7 +7,8 @@
     This script automates the process of building the Python cryptography pip package
     from source so that it runs natively on Windows ARM64 hardware. It checks all
     prerequisites, installs and configures Rust with the ARM64 target, sets up the
-    Visual Studio build environment, and builds/installs the package.
+    Visual Studio build environment, installs OpenSSL ARM64 development libraries
+    if needed, and builds/installs the package.
 
 .PARAMETER PythonExe
     Path to the Python executable to use. Defaults to "python" (uses PATH).
@@ -109,7 +110,7 @@ Write-Host ""
 # ---------------------------------------------------------------------------
 # Step 1 – Verify we are on Windows ARM64
 # ---------------------------------------------------------------------------
-Write-Step "Step 1/6  Checking system architecture"
+Write-Step "Step 1/8  Checking system architecture"
 
 if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") {
     Write-OK "Running on Windows ARM64 (native)"
@@ -131,7 +132,7 @@ else {
 # ---------------------------------------------------------------------------
 # Step 2 – Verify Python is ARM64
 # ---------------------------------------------------------------------------
-Write-Step "Step 2/6  Checking Python installation"
+Write-Step "Step 2/8  Checking Python installation"
 
 # Resolve the full path so we can report it clearly
 try {
@@ -171,7 +172,7 @@ else {
 # ---------------------------------------------------------------------------
 # Step 3 – Verify / install Rust
 # ---------------------------------------------------------------------------
-Write-Step "Step 3/6  Checking Rust toolchain"
+Write-Step "Step 3/8  Checking Rust toolchain"
 
 $rustupExe = Join-Path $env:USERPROFILE ".cargo\bin\rustup.exe"
 
@@ -229,7 +230,7 @@ Write-OK "Rust version  : $rustVersion"
 # ---------------------------------------------------------------------------
 # Step 4 – Ensure the ARM64 Rust target is installed
 # ---------------------------------------------------------------------------
-Write-Step "Step 4/6  Configuring Rust ARM64 target"
+Write-Step "Step 4/8  Configuring Rust ARM64 target"
 
 $arm64Target = "aarch64-pc-windows-msvc"
 
@@ -248,7 +249,7 @@ else {
 # ---------------------------------------------------------------------------
 # Step 5 – Set up the Visual Studio ARM64 build environment
 # ---------------------------------------------------------------------------
-Write-Step "Step 5/6  Setting up Visual Studio ARM64 build environment"
+Write-Step "Step 5/8  Setting up Visual Studio ARM64 build environment"
 
 # Locate vswhere – the canonical tool for finding VS installations
 $vswherePath = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -257,23 +258,31 @@ if (-not (Test-Path $vswherePath)) {
 }
 
 if (-not (Test-Path $vswherePath)) {
-    Write-Fail "vswhere.exe not found. Visual Studio does not appear to be installed."
+    Write-Fail "vswhere.exe not found. Visual Studio or VS Build Tools do not appear to be installed."
     Write-Host ""
-    Write-Host "  Please install Visual Studio 2022 (Community or above) with:" -ForegroundColor Yellow
-    Write-Host "    - Workload: 'Desktop development with C++'" -ForegroundColor Yellow
-    Write-Host "    - Component: 'MSVC v143 – VS 2022 C++ ARM64/ARM64EC build tools'" -ForegroundColor Yellow
-    Write-Host "    - Component: 'Windows 11 SDK (10.0.22000 or later)'" -ForegroundColor Yellow
+    Write-Host "  Install one of the following:" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  Download from: https://visualstudio.microsoft.com/downloads/" -ForegroundColor Cyan
+    Write-Host "  Option A – Visual Studio 2022 Build Tools (lighter, no IDE):" -ForegroundColor Yellow
+    Write-Host "    Download from: https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022" -ForegroundColor Cyan
+    Write-Host "    In the installer, select the workload:" -ForegroundColor Yellow
+    Write-Host "      'Desktop development with C++'" -ForegroundColor Yellow
+    Write-Host "    Then under Individual Components add:" -ForegroundColor Yellow
+    Write-Host "      'MSVC v143 – VS 2022 C++ ARM64/ARM64EC build tools (Latest)'" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Option B – Visual Studio 2022 (Community or above):" -ForegroundColor Yellow
+    Write-Host "    Download from: https://visualstudio.microsoft.com/downloads/" -ForegroundColor Cyan
+    Write-Host "    Select the same workload and component as above." -ForegroundColor Yellow
+    Write-Host ""
     exit 1
 }
 
-$vsInstallPath = & $vswherePath -latest -requires "Microsoft.VisualCpp.Tools.HostX64.TargetARM64" -property installationPath 2>$null
+# -products * ensures Build Tools installations are also discovered (not just full VS IDE)
+$vsInstallPath = & $vswherePath -latest -products * -requires "Microsoft.VisualCpp.Tools.HostX64.TargetARM64" -property installationPath 2>$null
 if (-not $vsInstallPath) {
-    # Try without the component requirement – VS is installed but maybe missing arm64 component
-    $vsInstallPath = & $vswherePath -latest -property installationPath 2>$null
+    # Try without the component requirement – VS/Build Tools is installed but maybe missing arm64 component
+    $vsInstallPath = & $vswherePath -latest -products * -property installationPath 2>$null
     if ($vsInstallPath) {
-        Write-Warn "Visual Studio found but the ARM64 build tools component may be missing."
+        Write-Warn "Visual Studio / Build Tools found but the ARM64 build tools component may be missing."
         Write-Warn "Path: $vsInstallPath"
         Write-Host ""
         Write-Host "  Open Visual Studio Installer and add the following component:" -ForegroundColor Yellow
@@ -285,8 +294,8 @@ if (-not $vsInstallPath) {
         }
     }
     else {
-        Write-Fail "Could not locate a Visual Studio installation."
-        Write-Host "  Install Visual Studio 2022 from: https://visualstudio.microsoft.com/downloads/" -ForegroundColor DarkGray
+        Write-Fail "Could not locate a Visual Studio or Build Tools installation."
+        Write-Host "  Install VS 2022 Build Tools from: https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022" -ForegroundColor DarkGray
         exit 1
     }
 }
@@ -324,9 +333,81 @@ $env:CARGO_BUILD_TARGET = $arm64Target
 Write-OK "CARGO_BUILD_TARGET = $arm64Target"
 
 # ---------------------------------------------------------------------------
-# Step 6 – Build and install cryptography
+# Step 6 – Verify / install OpenSSL ARM64 development libraries
 # ---------------------------------------------------------------------------
-Write-Step "Step 6/6  Building and installing the cryptography package"
+Write-Step "Step 6/8  Checking OpenSSL ARM64 development libraries"
+
+# The cryptography package links against OpenSSL at build time, so it needs
+# the ARM64 headers (.h) and static libraries (.lib).  The ShiningLight
+# OpenSSL Dev package installs these to "C:\Program Files\OpenSSL-Win64-ARM".
+$openSslDir = "C:\Program Files\OpenSSL-Win64-ARM"
+
+if (Test-Path $openSslDir) {
+    Write-OK "OpenSSL found : $openSslDir"
+}
+else {
+    Write-Warn "OpenSSL ARM64 dev libraries not found at '$openSslDir'."
+    Write-Info "Installing via winget (ShiningLight.OpenSSL.Dev) ..."
+    try {
+        & winget install ShiningLight.OpenSSL.Dev --accept-source-agreements --accept-package-agreements
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
+            throw "winget exited with code $LASTEXITCODE"
+        }
+    }
+    catch {
+        Write-Fail "Failed to install OpenSSL ARM64 dev libraries."
+        Write-Host "  Install manually: winget install ShiningLight.OpenSSL.Dev" -ForegroundColor Yellow
+        Write-Host "  Or download from: https://slproweb.com/products/Win32OpenSSL.html" -ForegroundColor Cyan
+        exit 1
+    }
+
+    if (-not (Test-Path $openSslDir)) {
+        Write-Fail "OpenSSL was installed but '$openSslDir' still not found."
+        Write-Host "  Check the install location and update the script if needed." -ForegroundColor DarkGray
+        exit 1
+    }
+    Write-OK "OpenSSL installed successfully."
+}
+
+# Set OpenSSL environment variables so the cryptography build can find it
+$env:OPENSSL_DIR         = $openSslDir
+$env:OPENSSL_INCLUDE_DIR = "$openSslDir\include"
+# The ShiningLight Dev package puts ARM64 libs in lib\VC\arm64\MD\
+$openSslLibDir = "$openSslDir\lib\VC\arm64\MD"
+if (Test-Path $openSslLibDir) {
+    $env:OPENSSL_LIB_DIR = $openSslLibDir
+}
+else {
+    # Fallback to the top-level lib dir
+    $env:OPENSSL_LIB_DIR = "$openSslDir\lib"
+    Write-Warn "Expected ARM64 lib path not found; using $($env:OPENSSL_LIB_DIR)"
+}
+
+Write-OK "OPENSSL_DIR         = $env:OPENSSL_DIR"
+Write-OK "OPENSSL_LIB_DIR     = $env:OPENSSL_LIB_DIR"
+Write-OK "OPENSSL_INCLUDE_DIR = $env:OPENSSL_INCLUDE_DIR"
+
+# ---------------------------------------------------------------------------
+# Step 7 – Configure OpenSSL DLL path for runtime
+# ---------------------------------------------------------------------------
+Write-Step "Step 7/8  Configuring OpenSSL runtime DLL path"
+
+# Add OpenSSL bin directory to PATH so the built cryptography module can find
+# the correct ARM64 OpenSSL DLLs at runtime (avoids conflicts with any
+# OpenSSL DLLs in C:\Windows\System32).
+$openSslBin = "$openSslDir\bin"
+if (Test-Path $openSslBin) {
+    $env:PATH = "$openSslBin;$env:PATH"
+    Write-OK "Added $openSslBin to PATH for runtime DLL resolution."
+}
+else {
+    Write-Warn "OpenSSL bin directory not found at $openSslBin – DLL conflicts may occur."
+}
+
+# ---------------------------------------------------------------------------
+# Step 8 – Build and install cryptography
+# ---------------------------------------------------------------------------
+Write-Step "Step 8/8  Building and installing the cryptography package"
 
 $pipTarget = if ($CryptographyVersion) { "cryptography==$CryptographyVersion" } else { "cryptography" }
 Write-Info "Target package  : $pipTarget"
@@ -335,12 +416,14 @@ Write-Host ""
 Write-Host "  Building from source – this may take 5-10 minutes the first time." -ForegroundColor DarkGray
 Write-Host ""
 
-# --no-binary :all: forces pip to build from source (no pre-built wheel)
-# --no-cache-dir avoids stale cached wheels from previous failed attempts
+# --no-binary cryptography forces pip to build cryptography from source
+# (no pre-built wheel) while allowing other deps to use wheels.
+# --force-reinstall ensures a build happens even if already installed,
+# so the wheel gets cached for reuse in other venvs (pip cache list cryptography).
 $pipArgs = @(
     "-m", "pip", "install",
-    "--no-binary", ":all:",
-    "--no-cache-dir",
+    "--force-reinstall",
+    "--no-binary", "cryptography",
     $pipTarget
 )
 
@@ -355,10 +438,11 @@ catch {
     Write-Fail "Build failed: $_"
     Write-Host ""
     Write-Host "  Troubleshooting tips:" -ForegroundColor Yellow
-    Write-Host "    1. Ensure the MSVC ARM64 build tools are installed in Visual Studio." -ForegroundColor Yellow
+    Write-Host "    1. Ensure the MSVC ARM64 build tools are installed." -ForegroundColor Yellow
     Write-Host "       Open 'Visual Studio Installer', click Modify, and under" -ForegroundColor Yellow
     Write-Host "       'Individual Components' add:" -ForegroundColor Yellow
     Write-Host "         MSVC v143 – VS 2022 C++ ARM64/ARM64EC build tools (Latest)" -ForegroundColor Yellow
+    Write-Host "       (This works with both VS Build Tools and full Visual Studio.)" -ForegroundColor Yellow
     Write-Host "    2. Try running this script from a 'Developer PowerShell for VS 2022'" -ForegroundColor Yellow
     Write-Host "       prompt configured for ARM64." -ForegroundColor Yellow
     Write-Host "    3. Check that Rust's stable-aarch64-pc-windows-msvc toolchain is OK:" -ForegroundColor Yellow

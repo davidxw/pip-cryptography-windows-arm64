@@ -28,36 +28,40 @@ The following must be installed **manually** before running the script. These st
 
 You must be running a 64-bit ARM edition of Windows 11 on native ARM64 hardware (e.g. Snapdragon X, Ampere Altra, etc.). Windows 11 ARM64 can run x64 applications via emulation, but for the best results Python and all build tools should be ARM64-native.
 
-### 2 – Python for ARM64
+### 2 – Python (ARM64)
 
-Download and install the **ARM64 native build** of Python 3.9 or later from the official Python website:
-
-<https://www.python.org/downloads/windows/>
-
-On the download page, choose the installer labelled **"ARM64"** for your chosen Python version (e.g. `python-3.12.x-arm64.exe`). Do **not** use the standard x86-64 installer – it runs under emulation and produces emulated wheels.
-
-Verify you have the right build:
+You need an **ARM64-native** build of Python 3.9 or later. Verify your existing install:
 
 ```powershell
 python -c "import platform; print(platform.machine())"
 # Expected output: ARM64
 ```
 
-### 3 – Visual Studio 2022 with ARM64 Build Tools
+If the output shows `AMD64` instead, or Python is not installed, install the ARM64 build via **winget**:
 
-Install **Visual Studio 2022** (Community edition is free) from:
+```powershell
+winget install Python.Python.3.12
+```
 
-<https://visualstudio.microsoft.com/downloads/>
+Winget automatically selects the ARM64 package on ARM64 hardware.
 
-During installation (or by clicking **Modify** in Visual Studio Installer), select:
+### 3 – C++ ARM64 Build Tools
 
-| Where | What to enable |
-|-------|----------------|
-| Workloads tab | **Desktop development with C++** |
-| Individual Components tab | **MSVC v143 – VS 2022 C++ ARM64/ARM64EC build tools (Latest)** |
-| Individual Components tab | **Windows 11 SDK (10.0.22000.0 or later)** |
+You need the MSVC ARM64 compiler and linker. The lightest way to get them is via the **Visual Studio 2022 Build Tools** (no full IDE required):
 
-> **Tip:** If you already have Visual Studio installed, open **Visual Studio Installer → Modify → Individual Components** and search for "ARM64" to find the missing component.
+1. Download **Build Tools for Visual Studio 2022** from:
+   <https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022>
+2. In the installer, select the **Desktop development with C++** workload.
+3. In the **Individual Components** tab, ensure the following are checked:
+
+| Component | Why it's needed |
+|-----------|----------------|
+| **MSVC v143 – VS 2022 C++ ARM64/ARM64EC build tools (Latest)** | ARM64 compiler & linker |
+| **Windows 11 SDK (10.0.22000.0 or later)** | Windows headers & libraries |
+
+> **Alternative:** If you already have **Visual Studio 2022** (Community / Professional / Enterprise) installed, you can add the same components via **Visual Studio Installer → Modify → Individual Components** instead of installing the standalone Build Tools.
+
+> **Tip:** Search for "ARM64" in the Individual Components tab to quickly find the required component.
 
 ---
 
@@ -101,9 +105,11 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 2. Verifies the Python interpreter is an ARM64-native build.
 3. Installs **Rust** via `rustup` if it is not already present (downloads the ARM64 `rustup-init.exe` automatically).
 4. Adds the `aarch64-pc-windows-msvc` Rust compilation target.
-5. Locates Visual Studio and loads the ARM64 build environment (`vcvarsall.bat arm64`).
-6. Runs `pip install --no-binary :all: cryptography` to build and install the package from source.
-7. Runs a smoke test to confirm the installation works.
+5. Locates Visual Studio / Build Tools and loads the ARM64 build environment (`vcvarsall.bat arm64`).
+6. Installs **OpenSSL ARM64 development libraries** via `winget` if not already present, and sets the `OPENSSL_DIR`, `OPENSSL_LIB_DIR`, and `OPENSSL_INCLUDE_DIR` environment variables.
+7. Configures the OpenSSL DLL path to avoid runtime conflicts with system DLLs.
+8. Runs `pip install --no-binary :all: cryptography` to build and install the package from source.
+9. Runs a smoke test to confirm the installation works.
 
 ---
 
@@ -118,13 +124,27 @@ pip install azure-identity azure-keyvault-secrets azure-storage-blob
 # … and any other azure-* packages you need
 ```
 
+### Using multiple virtual environments
+
+The built ARM64 wheel is **cached by pip** automatically. Once the script has built `cryptography` successfully, any subsequent `pip install cryptography` (or a package that depends on it) in **any** virtual environment will use the cached wheel — no rebuild or environment variables required.
+
+You can verify the wheel is cached:
+
+```powershell
+pip cache list cryptography
+```
+
+If you need to force a rebuild (e.g. after upgrading OpenSSL), re-run the script.
+
 ### Keeping cryptography up to date
 
-Because `cryptography` was built from source (not from a wheel), `pip install --upgrade cryptography` will attempt to download a pre-built wheel and may fail again. Re-run the script to upgrade:
+To upgrade to a new version, re-run the script — it will build and cache the new version:
 
 ```powershell
 .\build-cryptography-arm64.ps1 -CryptographyVersion "<new-version>"
 ```
+
+After that, `pip install --upgrade cryptography` in any venv will use the newly cached wheel.
 
 ### Rust remains installed
 
@@ -166,7 +186,10 @@ python -c "from azure.identity import DefaultAzureCredential; print('azure-ident
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | `Could not find a version that satisfies the requirement` | No ARM64 wheel on PyPI | Run this script |
-| Build fails with `link.exe not found` | ARM64 MSVC tools missing | Add the ARM64 build tools in VS Installer |
+| Build fails with `link.exe not found` | ARM64 MSVC tools missing | Add the ARM64 build tools in VS Installer (works with Build Tools or full VS) |
+| `Could not find directory of OpenSSL installation` | OpenSSL ARM64 dev libraries missing | Run `winget install ShiningLight.OpenSSL.Dev` (the script does this automatically) |
+| `OpenSSL library not found at lib` | Wrong OpenSSL lib path | Ensure `OPENSSL_LIB_DIR` points to `lib\VC\arm64\MD` (not the top-level `lib`) |
+| `DLL load failed: The specified procedure could not be found` | System OpenSSL DLLs loaded instead of ARM64 build | Ensure `C:\Program Files\OpenSSL-Win64-ARM\bin` is on PATH before `System32` |
 | `error[E0463]: can't find crate for std` | Wrong Rust target | Re-run the script; it will re-add the target |
 | Python arch shows `AMD64` not `ARM64` | Wrong Python build installed | Install the ARM64 Python installer |
 | `rustup` download fails | No internet / proxy | Install Rust manually from <https://rustup.rs/> then re-run |
