@@ -196,6 +196,12 @@ python -c "from azure.identity import DefaultAzureCredential; print('azure-ident
 
 ---
 
+## Acknowledgements
+
+The OpenSSL build steps in this project were informed by the excellent guide [*The Complete Guide to Setting Up Python and Azure SDK on Windows ARM64*](https://zenn.dev/pcmin/articles/windows-arm64-python-cryptography-azure-sdk) by [@pcmin](https://zenn.dev/pcmin).
+
+---
+
 ## License
 
 See [LICENSE](LICENSE).
