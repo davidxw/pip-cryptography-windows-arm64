@@ -1,61 +1,40 @@
 # pip-cryptography-windows-arm64
 
-A PowerShell script that automates building and installing the Python
-[`cryptography`](https://pypi.org/project/cryptography/) package natively on
-**Windows ARM64**.
+A PowerShell script that automates building and installing the Python [`cryptography`](https://pypi.org/project/cryptography/) package natively on **Windows ARM64**.
 
 ---
 
 ## The Problem
 
-The `cryptography` Python package is a core dependency of many popular
-libraries – most notably the **Azure SDK** (e.g. `azure-identity`,
-`azure-keyvault-secrets`). Since version 3.4, `cryptography` is partially
-written in Rust and distributed as pre-compiled binary wheels on PyPI.
+The `cryptography` Python package is a core dependency of many popular libraries – most notably the **Azure SDK** (e.g. `azure-identity`, `azure-keyvault-secrets`). Since version 3.4, `cryptography` is partially written in Rust and distributed as pre-compiled binary wheels on PyPI.
 
-PyPI currently does **not** publish a pre-built `win_arm64` wheel for
-`cryptography`. This means that on a Windows ARM64 machine (e.g. a Snapdragon
-X Elite / X Plus laptop, or an ARM64 Azure VM), running `pip install
-cryptography` (or any package that depends on it) **fails** with an error such
-as:
+PyPI currently does **not** publish a pre-built `win_arm64` wheel for `cryptography`. This means that on a Windows ARM64 machine (e.g. a Snapdragon X Elite / X Plus laptop, or an ARM64 Azure VM), running `pip install cryptography` (or any package that depends on it) **fails** with an error such as:
 
 ```
 ERROR: Could not find a version that satisfies the requirement cryptography
 ```
 
-or silently installs an x64/x86 emulated build that performs poorly or causes
-subtle runtime errors.
+or silently installs an x64/x86 emulated build that performs poorly or causes subtle runtime errors.
 
-The solution is to **build the package from source** on the ARM64 machine. The
-`build-cryptography-arm64.ps1` script in this repository automates that
-process.
+The solution is to **build the package from source** on the ARM64 machine. The `build-cryptography-arm64.ps1` script in this repository automates that process.
 
 ---
 
 ## Prerequisites
 
-The following must be installed **manually** before running the script. These
-steps cannot be fully automated because they involve large installers and
-licence agreements.
+The following must be installed **manually** before running the script. These steps cannot be fully automated because they involve large installers and licence agreements.
 
 ### 1 – Windows 11 ARM64
 
-You must be running a 64-bit ARM edition of Windows 11 on native ARM64
-hardware (e.g. Snapdragon X, Ampere Altra, etc.). Windows 11 ARM64 can run
-x64 applications via emulation, but for the best results Python and all
-build tools should be ARM64-native.
+You must be running a 64-bit ARM edition of Windows 11 on native ARM64 hardware (e.g. Snapdragon X, Ampere Altra, etc.). Windows 11 ARM64 can run x64 applications via emulation, but for the best results Python and all build tools should be ARM64-native.
 
 ### 2 – Python for ARM64
 
-Download and install the **ARM64 native build** of Python 3.9 or later from
-the official Python website:
+Download and install the **ARM64 native build** of Python 3.9 or later from the official Python website:
 
 <https://www.python.org/downloads/windows/>
 
-On the download page, choose the installer labelled **"ARM64"** for your
-chosen Python version (e.g. `python-3.12.x-arm64.exe`). Do **not** use the
-standard x86-64 installer – it runs under emulation and produces emulated
-wheels.
+On the download page, choose the installer labelled **"ARM64"** for your chosen Python version (e.g. `python-3.12.x-arm64.exe`). Do **not** use the standard x86-64 installer – it runs under emulation and produces emulated wheels.
 
 Verify you have the right build:
 
@@ -70,8 +49,7 @@ Install **Visual Studio 2022** (Community edition is free) from:
 
 <https://visualstudio.microsoft.com/downloads/>
 
-During installation (or by clicking **Modify** in Visual Studio Installer),
-select:
+During installation (or by clicking **Modify** in Visual Studio Installer), select:
 
 | Where | What to enable |
 |-------|----------------|
@@ -79,17 +57,13 @@ select:
 | Individual Components tab | **MSVC v143 – VS 2022 C++ ARM64/ARM64EC build tools (Latest)** |
 | Individual Components tab | **Windows 11 SDK (10.0.22000.0 or later)** |
 
-> **Tip:** If you already have Visual Studio installed, open
-> **Visual Studio Installer → Modify → Individual Components** and search
-> for "ARM64" to find the missing component.
+> **Tip:** If you already have Visual Studio installed, open **Visual Studio Installer → Modify → Individual Components** and search for "ARM64" to find the missing component.
 
 ---
 
 ## Installation Steps
 
-Once the prerequisites are in place, open a **PowerShell** terminal (does
-**not** need to be a Developer prompt – the script sets up the environment
-itself) and run:
+Once the prerequisites are in place, open a **PowerShell** terminal (does **not** need to be a Developer prompt – the script sets up the environment itself) and run:
 
 ```powershell
 # 1. Clone or download this repository
@@ -125,13 +99,10 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 1. Verifies the machine is Windows ARM64.
 2. Verifies the Python interpreter is an ARM64-native build.
-3. Installs **Rust** via `rustup` if it is not already present (downloads the
-   ARM64 `rustup-init.exe` automatically).
+3. Installs **Rust** via `rustup` if it is not already present (downloads the ARM64 `rustup-init.exe` automatically).
 4. Adds the `aarch64-pc-windows-msvc` Rust compilation target.
-5. Locates Visual Studio and loads the ARM64 build environment
-   (`vcvarsall.bat arm64`).
-6. Runs `pip install --no-binary :all: cryptography` to build and install
-   the package from source.
+5. Locates Visual Studio and loads the ARM64 build environment (`vcvarsall.bat arm64`).
+6. Runs `pip install --no-binary :all: cryptography` to build and install the package from source.
 7. Runs a smoke test to confirm the installation works.
 
 ---
@@ -140,8 +111,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ### Installing Azure SDK packages
 
-Once `cryptography` is installed natively, you can install the Azure SDK
-packages as normal:
+Once `cryptography` is installed natively, you can install the Azure SDK packages as normal:
 
 ```powershell
 pip install azure-identity azure-keyvault-secrets azure-storage-blob
@@ -150,9 +120,7 @@ pip install azure-identity azure-keyvault-secrets azure-storage-blob
 
 ### Keeping cryptography up to date
 
-Because `cryptography` was built from source (not from a wheel), `pip
-install --upgrade cryptography` will attempt to download a pre-built wheel
-and may fail again. Re-run the script to upgrade:
+Because `cryptography` was built from source (not from a wheel), `pip install --upgrade cryptography` will attempt to download a pre-built wheel and may fail again. Re-run the script to upgrade:
 
 ```powershell
 .\build-cryptography-arm64.ps1 -CryptographyVersion "<new-version>"
@@ -160,23 +128,17 @@ and may fail again. Re-run the script to upgrade:
 
 ### Rust remains installed
 
-The script installs Rust permanently in `%USERPROFILE%\.cargo`. This is
-intentional – you will need Rust if you ever rebuild `cryptography` or other
-Rust-based Python packages. If you want to remove Rust later, run
-`rustup self uninstall`.
+The script installs Rust permanently in `%USERPROFILE%\.cargo`. This is intentional – you will need Rust if you ever rebuild `cryptography` or other Rust-based Python packages. If you want to remove Rust later, run `rustup self uninstall`.
 
 ### Performance
 
-A natively-compiled ARM64 `cryptography` wheel performs significantly better
-than the x64 emulated version. Benchmarks show 2–4× throughput improvements
-for cryptographic operations on Snapdragon X hardware.
+A natively-compiled ARM64 `cryptography` wheel performs significantly better than the x64 emulated version. Benchmarks show 2–4× throughput improvements for cryptographic operations on Snapdragon X hardware.
 
 ---
 
 ## Testing
 
-After the script finishes successfully it runs a built-in smoke test. You
-can also verify the installation manually:
+After the script finishes successfully it runs a built-in smoke test. You can also verify the installation manually:
 
 ```powershell
 # 1. Check the installed version and architecture
