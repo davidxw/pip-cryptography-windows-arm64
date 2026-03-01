@@ -1,8 +1,6 @@
-# pip-cryptography-windows-arm64
+# pip Cryptography on Windows ARM64
 
 A PowerShell script that automates building and installing the Python [`cryptography`](https://pypi.org/project/cryptography/) package natively on **Windows ARM64**.
-
----
 
 ## The Problem
 
@@ -14,11 +12,7 @@ PyPI currently does **not** publish a pre-built `win_arm64` wheel for `cryptogra
 ERROR: Could not find a version that satisfies the requirement cryptography
 ```
 
-or silently installs an x64/x86 emulated build that performs poorly or causes subtle runtime errors.
-
 The solution is to **build the package from source** on the ARM64 machine. The `build-cryptography-arm64.ps1` script in this repository automates that process.
-
----
 
 ## Prerequisites
 
@@ -49,8 +43,11 @@ Winget automatically selects the ARM64 package on ARM64 hardware.
 
 You need the MSVC ARM64 compiler and linker. The lightest way to get them is via the **Visual Studio 2022 Build Tools** (no full IDE required):
 
-1. Download **Build Tools for Visual Studio 2022** from:
-   <https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022>
+1. Downloand and run the Visual Studio 2022 Build Tools installer:
+
+```powershell
+winget install --id=Microsoft.VisualStudio.2022.BuildTools
+```
 2. In the installer, select the **Desktop development with C++** workload.
 3. In the **Individual Components** tab, ensure the following are checked:
 
@@ -59,11 +56,9 @@ You need the MSVC ARM64 compiler and linker. The lightest way to get them is via
 | **MSVC v143 – VS 2022 C++ ARM64/ARM64EC build tools (Latest)** | ARM64 compiler & linker |
 | **Windows 11 SDK (10.0.22000.0 or later)** | Windows headers & libraries |
 
-> **Alternative:** If you already have **Visual Studio 2022** (Community / Professional / Enterprise) installed, you can add the same components via **Visual Studio Installer → Modify → Individual Components** instead of installing the standalone Build Tools.
+> [!NOTE] If you already have **Visual Studio 2022** (Community / Professional / Enterprise) installed, you can add the same components via **Visual Studio Installer → Modify → Individual Components** instead of installing the standalone Build Tools.
 
-> **Tip:** Search for "ARM64" in the Individual Components tab to quickly find the required component.
-
----
+[!TIP] Search for "ARM64" in the Individual Components tab to quickly find the required component.
 
 ## Installation Steps
 
@@ -111,8 +106,6 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 8. Runs `pip install --no-binary :all: cryptography` to build and install the package from source.
 9. Runs a smoke test to confirm the installation works.
 
----
-
 ## Follow-up Steps and Implications
 
 ### Installing Azure SDK packages
@@ -154,8 +147,6 @@ The script installs Rust permanently in `%USERPROFILE%\.cargo`. This is intentio
 
 A natively-compiled ARM64 `cryptography` wheel performs significantly better than the x64 emulated version. Benchmarks show 2–4× throughput improvements for cryptographic operations on Snapdragon X hardware.
 
----
-
 ## Testing
 
 After the script finishes successfully it runs a built-in smoke test. You can also verify the installation manually:
@@ -179,29 +170,7 @@ print('Decrypt OK:', f.decrypt(tok))
 python -c "from azure.identity import DefaultAzureCredential; print('azure-identity OK')"
 ```
 
----
-
-## Troubleshooting
-
-| Symptom | Likely cause | Fix |
-|---------|-------------|-----|
-| `Could not find a version that satisfies the requirement` | No ARM64 wheel on PyPI | Run this script |
-| Build fails with `link.exe not found` | ARM64 MSVC tools missing | Add the ARM64 build tools in VS Installer (works with Build Tools or full VS) |
-| `Could not find directory of OpenSSL installation` | OpenSSL ARM64 dev libraries missing | Run `winget install ShiningLight.OpenSSL.Dev` (the script does this automatically) |
-| `OpenSSL library not found at lib` | Wrong OpenSSL lib path | Ensure `OPENSSL_LIB_DIR` points to `lib\VC\arm64\MD` (not the top-level `lib`) |
-| `DLL load failed: The specified procedure could not be found` | System OpenSSL DLLs loaded instead of ARM64 build | Ensure `C:\Program Files\OpenSSL-Win64-ARM\bin` is on PATH before `System32` |
-| `error[E0463]: can't find crate for std` | Wrong Rust target | Re-run the script; it will re-add the target |
-| Python arch shows `AMD64` not `ARM64` | Wrong Python build installed | Install the ARM64 Python installer |
-| `rustup` download fails | No internet / proxy | Install Rust manually from <https://rustup.rs/> then re-run |
-
----
-
 ## Acknowledgements
 
 The OpenSSL build steps in this project were informed by the excellent guide [*The Complete Guide to Setting Up Python and Azure SDK on Windows ARM64*](https://zenn.dev/pcmin/articles/windows-arm64-python-cryptography-azure-sdk) by [@pcmin](https://zenn.dev/pcmin).
 
----
-
-## License
-
-See [LICENSE](LICENSE).
