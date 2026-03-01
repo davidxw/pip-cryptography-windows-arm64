@@ -56,9 +56,11 @@ winget install --id=Microsoft.VisualStudio.2022.BuildTools
 | **MSVC v143 – VS 2022 C++ ARM64/ARM64EC build tools (Latest)** | ARM64 compiler & linker |
 | **Windows 11 SDK (10.0.22000.0 or later)** | Windows headers & libraries |
 
-> [!NOTE] If you already have **Visual Studio 2022** (Community / Professional / Enterprise) installed, you can add the same components via **Visual Studio Installer → Modify → Individual Components** instead of installing the standalone Build Tools.
+> [!NOTE] 
+If you already have **Visual Studio 2022** (Community / Professional / Enterprise) installed, you can add the same components via **Visual Studio Installer → Modify → Individual Components** instead of installing the standalone Build Tools.
 
-[!TIP] Search for "ARM64" in the Individual Components tab to quickly find the required component.
+> [!TIP] 
+Search for "ARM64" in the Individual Components tab to quickly find the required component.
 
 ## Installation Steps
 
